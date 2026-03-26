@@ -1,0 +1,64 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_admin_dashboard/pm/pm_routes.dart';
+
+class AdminMenu {
+  final String key;
+  final String label;
+  final IconData icon;
+  final String route;
+
+  const AdminMenu({
+    required this.key,
+    required this.label,
+    required this.icon,
+    required this.route,
+  });
+}
+
+/// ✅ เมนูทั้งหมดในระบบ (เพิ่มทีหลังได้)
+const List<AdminMenu> adminMenus = [
+    // ✅ PM MENU
+  AdminMenu(
+    key: 'pm',
+    label: 'Project Management',
+    icon: Icons.work_outline,
+    route: PMRoutes.projects, // '/pm/projects'
+  ),
+  AdminMenu(
+    key: 'pm_my_tasks',
+    label: 'My Tasks',
+    icon: Icons.assignment_ind_outlined,
+    route: PMRoutes.myTasks,
+  ),
+  AdminMenu(
+    key: 'stores',
+    label: 'Stores',
+    icon: Icons.store,
+    route: '/stores',
+  ),
+  AdminMenu(
+    key: 'qr',
+    label: 'QR Code Generator',
+    icon: Icons.qr_code,
+    route: '/qr',
+  ),
+  AdminMenu(
+    key: 'barcode',
+    label: 'Barcode Generator',
+    icon: Icons.view_week,
+    route: '/barcode',
+  ),
+  AdminMenu(
+    key: 'leads',
+    label: 'Lead Report',
+    icon: Icons.assignment,
+    route: '/leads',
+  ),
+  AdminMenu(
+    key: 'projects',
+    label: 'Project Progress',
+    icon: Icons.timeline,
+    route: '/projects',
+  ),
+
+];

@@ -1,0 +1,81 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class TaskModel {
+  final String id;
+  final String projectId;
+  final String title;
+  final String status;
+  final int order;
+
+  /// assignment
+  final String? assigneeId;
+  final String? assigneeName;
+
+  /// optional fields (ใช้ใน dialog / my task)
+  final String description;
+  final DateTime? dueDate;
+
+  TaskModel({
+    required this.id,
+    required this.projectId,
+    required this.title,
+    required this.status,
+    required this.order,
+    this.assigneeId,
+    this.assigneeName,
+    this.description = '',
+    this.dueDate,
+  });
+
+  // ------------------------------------------------------------------
+  // Firestore -> Model
+  // ------------------------------------------------------------------
+  factory TaskModel.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+    String projectId,
+  ) {
+    final data = doc.data() ?? {};
+
+    return TaskModel(
+      id: doc.id,
+      projectId: projectId,
+      title: data['title'] ?? '',
+      status: data['status'] ?? 'todo',
+      order: data['order'] ?? 0,
+      assigneeId: data['assigneeId'],
+      assigneeName: data['assigneeName'],
+      description: data['description'] ?? '',
+      dueDate: data['dueDate'] is Timestamp
+          ? (data['dueDate'] as Timestamp).toDate()
+          : null,
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Model -> Firestore (ใช้ใน update / reorder / permission)
+  // ------------------------------------------------------------------
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'status': status,
+      'order': order,
+      'assigneeId': assigneeId,
+      'assigneeName': assigneeName,
+      'description': description,
+      'dueDate':
+          dueDate != null ? Timestamp.fromDate(dueDate!) : null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Helpers (ใช้กับ Auth / Permission)
+  // ------------------------------------------------------------------
+  bool isAssignedTo(String uid) {
+    return assigneeId == uid;
+  }
+
+  bool get isUnassigned => assigneeId == null;
+
+  bool get isDone => status == 'done';
+}

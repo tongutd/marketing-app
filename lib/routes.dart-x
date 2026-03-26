@@ -1,0 +1,41 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_admin_dashboard/pm/pages/task/pm_my_task_board_page.dart';
+
+import 'layout/admin_shell.dart';
+
+import 'pages/auth/auth_gate_page.dart';
+import 'pages/dashboard/dashboard_page.dart';
+import 'pages/stores/store_list_page.dart';
+import 'pages/qr-generator/qr_generator_page.dart';
+
+// ✅ เพิ่มบรรทัดนี้
+import 'pm/pages/dashboard/pm_project_dashboard_page.dart';
+import 'pm/pm_routes.dart';
+
+final Map<String, WidgetBuilder> routes = {
+  '/dashboard': (_) => const AdminShell(
+        routeName: '/dashboard',
+        child: DashboardPage(),
+      ),
+
+  '/stores': (_) => const AdminShell(
+        routeName: '/stores',
+        child: StoreListPage(),
+      ),
+
+  '/qr': (_) => const AdminShell(
+        routeName: '/qr',
+        child: QrGeneratorPage(),
+      ),
+
+  // PM
+  PMRoutes.projects: (_) => const AdminShell(
+        routeName: PMRoutes.projects,
+        child: PMProjectDashboardPage(),
+      ),
+
+  PMRoutes.myWork: (_) => const AdminShell(
+        routeName: PMRoutes.myWork,
+        child: PMMyTaskBoardPage(),
+      ),
+};

@@ -1,0 +1,344 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../models/task_model.dart';
+import '../../services/task_service.dart';
+import '../../services/project_service.dart';
+import '../../widgets/pm_breadcrumb.dart';
+import '../../../providers/auth_provider.dart';
+
+class PMMyTaskBoardPage extends StatefulWidget {
+  const PMMyTaskBoardPage({super.key});
+
+  @override
+  State<PMMyTaskBoardPage> createState() => _PMMyTaskBoardPageState();
+}
+
+class _PMMyTaskBoardPageState extends State<PMMyTaskBoardPage> {
+  final Map<String, String> _projectNameMap = {};
+  bool _loadingProjects = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<List<TaskModel>>(
+          stream: TaskService.streamMyTasks(userId: user.uid),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Center(
+                  child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Stream error: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              );
+            }
+
+            final allTasks = snapshot.data ?? [];
+
+            /// 🔒 filter เฉพาะของเรา (กันเคสแปลก)
+            final myTasks = allTasks
+                .where((t) => t.assigneeId == user.uid)
+                .toList();
+
+            if (myTasks.isEmpty) {
+              return const Center(
+                child: Text('No tasks assigned'),
+              );
+            }
+
+            /// ------------------------------
+            /// Group by projectId
+            /// ------------------------------
+            final Map<String, List<TaskModel>> grouped = {};
+            for (final task in myTasks) {
+              grouped.putIfAbsent(task.projectId, () => []);
+              grouped[task.projectId]!.add(task);
+            }
+
+            /// preload project names
+            _loadProjectNames(grouped.keys.toSet());
+
+            /// ------------------------------
+            /// Badge counts
+            /// ------------------------------
+            final todoCount =
+                myTasks.where((t) => t.status == 'todo').length;
+            final doingCount =
+                myTasks.where((t) => t.status == 'doing').length;
+            final overdueCount = myTasks.where(
+              (t) =>
+                  t.dueDate != null &&
+                  t.dueDate!.isBefore(DateTime.now()) &&
+                  t.status != 'done',
+            ).length;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                /// 🧭 Breadcrumb
+                PMBreadcrumb(
+                  items: [
+                    PMCrumb(
+                      icon: Icons.assignment,
+                      label: 'My Tasks',
+                      badges: [
+                        if (todoCount > 0)
+                          CrumbBadge(
+                            count: todoCount,
+                            color: Colors.grey,
+                          ),
+                        if (doingCount > 0)
+                          CrumbBadge(
+                            count: doingCount,
+                            color: Colors.orange,
+                          ),
+                        if (overdueCount > 0)
+                          CrumbBadge(
+                            count: overdueCount,
+                            color: Colors.red,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                /// ------------------------------
+                /// Project Cards
+                /// ------------------------------
+                Expanded(
+                  child: ListView(
+                    children: grouped.entries.map((entry) {
+                      final projectId = entry.key;
+                      final tasks = entry.value;
+
+                      final projectName =
+                          _projectNameMap[projectId] ??
+                              'Loading...';
+
+                      final todo =
+                          tasks.where((t) => t.status == 'todo').length;
+                      final doing =
+                          tasks.where((t) => t.status == 'doing').length;
+                      final overdue = tasks.where(
+                        (t) =>
+                            t.dueDate != null &&
+                            t.dueDate!.isBefore(DateTime.now()) &&
+                            t.status != 'done',
+                      ).length;
+
+                      return Card(
+                        margin:
+                            const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(14),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              /// Project header
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.folder,
+                                    color:
+                                        Color(0xFF36B37E),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      projectName,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight:
+                                            FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  if (todo > 0)
+                                    _MiniBadge(
+                                        todo, Colors.grey),
+                                  if (doing > 0)
+                                    _MiniBadge(
+                                        doing, Colors.orange),
+                                  if (overdue > 0)
+                                    _MiniBadge(
+                                        overdue, Colors.red),
+                                ],
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              /// Tasks
+                              ...tasks.map((task) {
+                                final isOverdue =
+                                    task.dueDate != null &&
+                                        task.dueDate!
+                                            .isBefore(
+                                                DateTime.now()) &&
+                                        task.status != 'done';
+
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding:
+                                      EdgeInsets.zero,
+                                  title: Text(task.title),
+                                  subtitle: task.dueDate != null
+                                      ? Text(
+                                          'Due ${task.dueDate!.toLocal().toString().split(' ')[0]}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isOverdue
+                                                ? Colors.red
+                                                : Colors.grey,
+                                          ),
+                                        )
+                                      : null,
+                                  trailing:
+                                      _StatusChip(task.status),
+                                  onTap: () {
+                                    debugPrint(
+                                        '🧭 NAV FROM MY TASK -> project $projectId');
+                                    Navigator.of(
+                                            context,
+                                            rootNavigator:
+                                                true)
+                                        .pushNamed(
+                                      '/pm/project/$projectId/tasks',
+                                      arguments: {
+                                        'focusTaskId':
+                                            task.id,
+                                      },
+                                    );
+                                  },
+                                );
+                              }).toList(),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// ------------------------------------------------------------
+  /// Load project names once
+  /// ------------------------------------------------------------
+  Future<void> _loadProjectNames(
+      Set<String> projectIds) async {
+    if (_loadingProjects) return;
+
+    final missing = projectIds
+        .where((id) => !_projectNameMap.containsKey(id))
+        .toSet();
+
+    if (missing.isEmpty) return;
+
+    _loadingProjects = true;
+
+    final names =
+        await ProjectService.getProjectNames(missing);
+
+    if (!mounted) return;
+
+    setState(() {
+      _projectNameMap.addAll(names);
+      _loadingProjects = false;
+    });
+  }
+}
+
+/// ------------------------------------------------------------
+/// Mini badge
+/// ------------------------------------------------------------
+class _MiniBadge extends StatelessWidget {
+  final int count;
+  final Color color;
+
+  const _MiniBadge(this.count, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 12,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+/// ------------------------------------------------------------
+/// Status Chip
+/// ------------------------------------------------------------
+class _StatusChip extends StatelessWidget {
+  final String status;
+
+  const _StatusChip(this.status);
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    String label;
+
+    switch (status) {
+      case 'doing':
+        color = Colors.orange;
+        label = 'Doing';
+        break;
+      case 'done':
+        color = Colors.green;
+        label = 'Done';
+        break;
+      default:
+        color = Colors.grey;
+        label = 'Todo';
+    }
+
+    return Chip(
+      label: Text(label),
+      backgroundColor: color.withOpacity(0.15),
+      labelStyle: TextStyle(color: color),
+    );
+  }
+}

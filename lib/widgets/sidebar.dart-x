@@ -1,0 +1,91 @@
+import 'package:flutter/material.dart';
+import '../menu/menu_registry.dart';
+
+class Sidebar extends StatefulWidget {
+  const Sidebar({super.key});
+
+  @override
+  State<Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<Sidebar> {
+  bool _collapsed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+
+    final visibleMenus = adminMenus;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: _collapsed ? 70 : 230,
+      color: Colors.grey.shade900,
+      child: Column(
+        children: [
+          /// -------------------------
+          /// Collapse / Expand button
+          /// -------------------------
+          Align(
+            alignment:
+                _collapsed ? Alignment.center : Alignment.centerRight,
+            child: IconButton(
+              icon: Icon(
+                _collapsed
+                    ? Icons.chevron_right
+                    : Icons.chevron_left,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                setState(() => _collapsed = !_collapsed);
+              },
+            ),
+          ),
+
+          const Divider(color: Colors.white24),
+
+          /// -------------------------
+          /// Menu items
+          /// -------------------------
+          Expanded(
+            child: ListView(
+              children: visibleMenus.map((menu) {
+                final active = currentRoute != null &&
+                    (currentRoute == menu.route ||
+                        currentRoute
+                            .startsWith('${menu.route}/'));
+
+                return ListTile(
+                  leading: Icon(
+                    menu.icon,
+                    color:
+                        active ? Colors.blue : Colors.white,
+                  ),
+                  title: _collapsed
+                      ? null
+                      : Text(
+                          menu.label,
+                          style: TextStyle(
+                            color: active
+                                ? Colors.blue
+                                : Colors.white,
+                          ),
+                        ),
+                  selected: active,
+                  onTap: () {
+                    if (currentRoute != menu.route) {
+                      Navigator.pushNamed(
+                        context,
+                        menu.route,
+                      );
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

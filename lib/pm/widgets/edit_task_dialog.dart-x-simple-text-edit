@@ -1,0 +1,296 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../models/task_model.dart';
+
+class EditTaskDialog extends StatefulWidget {
+  final String projectId;
+  final TaskModel task;
+
+  const EditTaskDialog({
+    super.key,
+    required this.projectId,
+    required this.task,
+  });
+
+  @override
+  State<EditTaskDialog> createState() => _EditTaskDialogState();
+}
+
+class _EditTaskDialogState extends State<EditTaskDialog> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descCtrl;
+
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.task.title);
+    _descCtrl =
+        TextEditingController(text: widget.task.description ?? '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: 640,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              /// ================= TITLE =================
+              TextField(
+                controller: _titleCtrl,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: 'Task title',
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// ================= DESCRIPTION HEADER =================
+              Row(
+                children: [
+                  const Text(
+                    'Description',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const Spacer(),
+
+                  /// 🔗 Insert Link Button
+                  TextButton.icon(
+                    icon: const Icon(Icons.link, size: 18),
+                    label: const Text('Insert link'),
+                    onPressed: _openInsertLinkDialog,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+
+              /// ================= DESCRIPTION FIELD =================
+              TextField(
+                controller: _descCtrl,
+                minLines: 4,
+                maxLines: 8,
+                decoration: InputDecoration(
+                  hintText:
+                      'Write description or insert links…',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+
+              /// 🔗 Markdown link preview
+              if (_descCtrl.text.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _MarkdownLinkPreview(text: _descCtrl.text),
+              ],
+
+              const SizedBox(height: 20),
+
+              /// ================= ACTIONS =================
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed:
+                        _saving ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ===================================================
+  /// 🔗 Insert Link Popup
+  /// ===================================================
+  void _openInsertLinkDialog() {
+    final textCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Insert link'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Link text',
+                  hintText: 'Google Drive',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: urlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'URL',
+                  hintText: 'https://…',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final label = textCtrl.text.trim();
+                final url = urlCtrl.text.trim();
+
+                if (label.isEmpty || url.isEmpty) return;
+
+                _insertMarkdownLink(label, url);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Insert'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// ===================================================
+  /// ✨ Insert markdown at cursor
+  /// ===================================================
+  void _insertMarkdownLink(String label, String url) {
+    final link = '[$label]($url)';
+
+    final selection = _descCtrl.selection;
+    final text = _descCtrl.text;
+
+    if (selection.isValid) {
+      final newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        link,
+      );
+
+      _descCtrl.text = newText;
+      _descCtrl.selection = TextSelection.collapsed(
+        offset: selection.start + link.length,
+      );
+    } else {
+      _descCtrl.text =
+          text.isEmpty ? link : '$text\n$link';
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+
+    await FirebaseFirestore.instance
+        .collection('projects')
+        .doc(widget.projectId)
+        .collection('tasks')
+        .doc(widget.task.id)
+        .update({
+      'title': _titleCtrl.text.trim(),
+      'description': _descCtrl.text.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (mounted) Navigator.pop(context);
+  }
+}
+
+/// =======================================================
+/// Markdown Link Preview
+/// [Label](https://example.com)
+/// =======================================================
+class _MarkdownLinkPreview extends StatelessWidget {
+  final String text;
+
+  const _MarkdownLinkPreview({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final regex =
+        RegExp(r'\[([^\]]+)\]\((https?:\/\/[^\)]+)\)');
+    final matches = regex.allMatches(text).toList();
+
+    if (matches.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Links',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 4),
+        ...matches.map((m) {
+          final label = m.group(1)!;
+          final url = m.group(2)!;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: RichText(
+        text: TextSpan(
+                text: label,
+                style: const TextStyle(
+                  color: Colors.blue,
+                  decoration: TextDecoration.underline,
+                ),
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () async {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                    }
+                  },
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
